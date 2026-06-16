@@ -3,29 +3,24 @@
 Drop-in replacement for the Mostek MK50240 top-octave frequency generator,
 built around the Waveshare RP2350-Zero.
 
-Tested target: ARP Omni 2. May work in other instruments that use the
-MK50240 or MK50241 — check the pinout and clock voltage before installing.
+Primary target: ARP Omni 2. May work in other instruments using the MK50240
+or MK50241 — verify the pinout and clock voltage before installing.
 
-**Status: untested on hardware.**
+**Status: untested on hardware. Treat all component values and wiring details
+as starting points, not verified specifications.**
 
 ---
 
 ## What it does
 
-The MK50240 takes an external clock (pin 2, nominally 2.00024 MHz in the
-Omni 2) and divides it by 13 fixed values to produce one full octave of
-top-octave square waves plus a C7 one octave below. These feed the Omni 2's
-downstream VCO/divider chain.
+The MK50240 takes an external clock (pin 2) and divides it by 13 fixed values
+to produce one full octave of top-octave square waves plus a C7 one octave
+below. This firmware replicates that using 13 PIO state machines on the
+RP2350-Zero, reading the same clock signal from the instrument's PCB and
+dividing it by the same values. Pitch tracks the instrument's own clock.
 
-This firmware uses the same external clock signal from the instrument's PCB,
-divided by the same values using RP2350 PIO state machines. Pitch tracks the
-instrument's own clock, including any tuning adjustments the instrument makes.
-This is the correct approach for a true drop-in replacement.
-
-The RP2350 was chosen over the RP2040 specifically because the MK50240 has
-13 outputs — one more than the RP2040's 8 PIO state machines can handle.
-The RP2350 has 12 state machines across two PIO blocks, covering all 13
-outputs exactly.
+The RP2350 was chosen over the RP2040 because the MK50240 has 13 outputs —
+one more than the RP2040's 8 PIO state machines can handle.
 
 ---
 
@@ -34,17 +29,18 @@ outputs exactly.
 ### What you need
 
 - Waveshare RP2350-Zero
-- 2× 68kΩ resistors, 2× 33kΩ resistors (clock + one spare — see below)
-- 13× MMBT3904 NPN transistors (SOT-23) + 13× 1kΩ + 13× 10kΩ resistors
-- 5V supply for VBUS (steal from a nearby regulator in the instrument)
+- Resistors for clock level shifting (see below)
+- 13× MMBT3904 NPN transistors (SOT-23) for output level shifting
+- 13× 1kΩ base resistors, 13× 10kΩ collector pullup resistors
+- 5V supply for VBUS (a nearby regulator in the instrument may work)
 - Machined DIP-16 pin header to sit in the MK50240 socket
 
 ### Pin mapping
 
 | MK50240 pin | Function | RP2350-Zero |
 |---|---|---|
-| 1 | VSS (+supply, ~15V) | VBUS via regulator (5V) |
-| 2 | CLOCK in | GPIO 26 (via 68k+33k voltage divider) |
+| 1 | VSS (+supply) | VBUS (5V from regulator) |
+| 2 | CLOCK in | GPIO 26 (needs level shifting — see below) |
 | 3 | VDD (GND) | GND |
 | 4 | ÷451 C#8 | GPIO 0 |
 | 5 | ÷426 D8 | GPIO 1 |
@@ -62,67 +58,62 @@ outputs exactly.
 
 ### Clock input (pin 2)
 
-The clock signal on pin 2 swings to VSS (~15V). The RP2350 GPIO maximum
-is 3.3V. **You must level-shift the clock down before connecting to GPIO 26.**
+The MK50240 clock swings to VSS (~15V in the Omni 2). The RP2350 GPIO
+maximum input is 3.3V. The clock signal must be level-shifted before
+connecting to GPIO 26.
 
-Voltage divider:
-```
-MK50240 pin 2 → 68kΩ → node → GPIO 26
-                node → 33kΩ → GND
-```
-Output at node ≈ 15V × 33/(68+33) = 4.9V... actually that's still too high.
-Use 18kΩ + 33kΩ instead:
-```
-MK50240 pin 2 → 68kΩ → node → GPIO 26
-                node → 22kΩ → GND
-```
-15V × 22/(68+22) = 3.67V — marginal. Better: use a Schottky diode clamp
-(BAT48 between GPIO 26 and 3.3V rail with a 10kΩ series resistor) which
-clamps anything above ~3.6V cleanly regardless of supply voltage.
+A Schottky diode clamp is a reliable approach regardless of exact supply
+voltage: place a BAT48 (or similar) between GPIO 26 and the 3.3V rail,
+with a series resistor (10kΩ) between the clock source and GPIO 26.
+Anything above ~3.6V is clamped. Verify the clamped signal looks clean
+on a scope before powering the RP2350.
+
+A resistor voltage divider also works if you know the supply voltage —
+choose values that bring the clock signal below 3.3V at the GPIO.
 
 ### Output levels
 
-The MK50240 datasheet specifies VOH = VSS-1.0V (~14V) and VOL = 0-1.5V.
-The downstream circuitry expects logic swings near the supply voltage.
-**Level shifting is required on all 13 outputs.**
+The MK50240 datasheet specifies VOH = VSS-1.0V minimum (~14V in the Omni 2)
+and VOL = 0-1.5V. The downstream circuitry expects logic swings near the
+supply voltage. The RP2350 GPIOs output 3.3V, which is unlikely to be
+recognised as a valid HIGH by the downstream circuitry without level shifting.
 
-Use MMBT3904 NPN transistors in open-collector configuration:
+A likely workable approach: MMBT3904 NPN transistors in open-collector
+configuration with pullups to the instrument's supply rail.
 
 ```
 GPIO → 1kΩ → MMBT3904 base
               MMBT3904 emitter → GND
-              MMBT3904 collector → output pin → downstream circuit
-                                       │
-                                    10kΩ pullup to VSS (+15V)
+              MMBT3904 collector → output → downstream circuit
+                                      │
+                                   10kΩ → VSS (+15V)
 ```
 
-- GPIO HIGH → transistor ON  → output pulled to GND (0V) = logic LOW
-- GPIO LOW  → transistor OFF → output pulled to ~15V via 10kΩ = logic HIGH
+GPIO HIGH → transistor ON → output LOW (0V)
+GPIO LOW  → transistor OFF → output HIGH (~15V via pullup)
 
-This inverts the output polarity. The original MK50240 outputs HIGH when
-active; our transistor outputs LOW when the GPIO is high. If the downstream
-circuit behaves incorrectly, swap `set(pins,0)` and `set(pins,1)` in the
-`divide()` PIO program in main.py.
+This inverts the output polarity relative to the GPIO state. If the
+downstream circuit behaves incorrectly, try swapping `set(pins,0)` and
+`set(pins,1)` in the `divide()` PIO program in `main.py`.
+
+Direct GPIO connection (without transistors) is worth trying first on the
+bench — it may work depending on what the downstream inputs actually need.
 
 ### Pin 16 — C7
 
-Pin 16 is not a direct divider output. The MK50240 internally takes the
-÷239 output (C8, pin 15) and divides it by 2 to produce C7 on pin 16.
-The firmware represents this as an effective divider of 478 (= 239 × 2),
-which gives the correct output frequency. Per the datasheet (Note 1),
-pin 16 always has 50% duty cycle — our ÷2 implementation naturally
-produces this.
+The MK50240 internally divides the ÷239 output (C8, pin 15) by 2 to
+produce C7 on pin 16, one octave below. The firmware uses an effective
+divider of 478 (= 239 × 2) to replicate this. Per the datasheet, pin 16
+has 50% duty cycle regardless of variant.
 
 ---
 
-## MK50240 vs MK50241 vs MK50242
+## Variants
 
-| Variant | Duty cycle | Pin 16 |
+| Variant | Duty cycle | Notes |
 |---|---|---|
-| MK50240 | 50% | C7 (÷239÷2), 50% duty |
-| MK50241 | 30% | C7 (÷239÷2), 50% duty |
-| MK50242 | 50% | **different pinout** — check datasheet before using |
+| MK50240 | 50% | Supported |
+| MK50241 | 30% | Same pinout as MK50240, should work |
+| MK50242 | 50% | Different pin order — edit `OUTPUTS` in main.py |
 
-If your instrument uses a MK50242, the GPIO-to-pin assignments need
-reordering. Edit the `OUTPUTS` list in main.py.
 
