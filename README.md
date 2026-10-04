@@ -125,3 +125,13 @@ has 50% duty cycle regardless of variant.
 | MK50240 | 50% | Supported |
 | MK50241 | 30% | Same pinout as MK50240, should work |
 | MK50242 | 50% | Different pin order — edit `OUTPUTS` in main.py |
+
+## License
+
+Copyright © 2026 Greg Miller / The Key & Cable Company.
+
+The firmware is licensed under the [GNU General Public License v3.0](LICENSE). You can use, study, share and modify it. If you distribute it or a modified version, you have to make the source available under the same licence.
+
+Hardware design files for the replacement board are licensed under the [CERN Open Hardware Licence Version 2 – Strongly Reciprocal (CERN-OHL-S-2.0)](LICENSE-HARDWARE). You can make, modify, sell and share hardware from them. If you share a modified design, or ship hardware made from one, you have to publish your design files under the same licence.
+
+Source location: <https://github.com/keyandcableco/MK50240-to-RP2350_TOG>
