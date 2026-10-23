@@ -69,6 +69,7 @@ GPIO map (MK50240 pin -> RP2350-Zero GPIO), note names for the Omni 2's
 import rp2
 from machine import Pin, mem32
 import os
+import sys
 import utime
 
 
@@ -160,6 +161,8 @@ PWM_INTR = PWM_BASE + 0xF4               # raw wrap flags, bit 6 = slice 6
 
 if "RP2350" not in os.uname().machine:
     raise RuntimeError("needs an RP2350: 12 state machines, PWM at 0x400A8000")
+if sys.implementation.version[:3] < (1, 26, 0):
+    raise RuntimeError("needs MicroPython 1.26.0 or newer: older releases never load programs into PIO2 (state machines 8-11; micropython issue #17509)")
 
 print("mk50240-rp2350 — ARP Omni 2 TOG replacement")
 print("Clock source: external (MK50240 pin 2 -> GPIO {} via 10k/2.7k divider)".format(CLOCK_GPIO))

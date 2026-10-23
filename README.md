@@ -237,7 +237,10 @@ print(machine.mem8[0x13])                      # bootrom version: 3 = A3, 4 = A4
 
 ## Firmware notes
 
-- MicroPython for the RP2350 (`main.py` refuses to run on an RP2040). The
+- MicroPython 1.26.0 or newer for the RP2350 (`main.py` refuses to run on an
+  RP2040 or on an older MicroPython). Releases before 1.26.0 never load
+  programs into the third PIO block, so state machines 8-11 (MK50240 pins
+  12-15) would stay silent with no error (MicroPython issue #17509). The
   state machines run at the full system clock (no `freq=`).
 - GPIO 12 is written into the PIO program (`wait(.., gpio, 12)`), because
   `asm_pio` cannot see module constants. Moving the ÷478 output means editing
